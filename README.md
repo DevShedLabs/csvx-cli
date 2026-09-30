@@ -1,165 +1,114 @@
-# CSVX Go Engine
+# CSVX CLI
 
-The Go engine is the first implementation of the CSVX specification. It is intentionally
-specification-first: the engine must conform to CSVX behavior, but its internal architecture does
-not define the format.
+`csvx-cli` is the one dedicated command-line tool for the CSVX spreadsheet format — a single Go
+binary. It calls into engine libraries (`csvx-go` today) for the actual load/edit/calculate/write
+work rather than reimplementing it; see `AGENTS.md` and `../csvx-spec/AGENTS.md` for why that split
+exists and what belongs where.
 
-## Current scope
-
-The initial package provides the Phase 1 foundation:
-
-- CSVX ZIP package loading
-- Manifest and workbook loading
-- UTF-8 CSV sheet loading
-- Optional `.meta.json` sheet metadata
-- Typed metadata structures for columns, formulas, caches, styles, and validation
-- Sparse cell metadata addressed by A1 coordinates
-- Duplicate and unsafe ZIP entry rejection
-- Package and extract CLI commands for developer workflows
-
-Formula parsing, calculation, import/export, and full CLI operations will be added behind the
-same canonical workbook model. Package writing and extract/package round-trip support are now
-available for developer workflows.
-
-## Development rule
-
-Each capability follows this sequence:
-
-```text
-Specify → create conformance fixtures → implement → run tests
-```
-
-The specification repository is the authority:
-
-```text
-../csvx-spec/
-```
-
-## Package
-
-```go
-workbook, err := csvx.Open("report.csvx")
-if err != nil {
-    return err
-}
-fmt.Println(workbook.Sheets[0].Records)
-```
-
-CSV is the canonical sheet data layer. Metadata that CSV cannot represent is stored in the matching
-`.meta.json` sidecar.
-
-## Commands
-
-Run commands from the repository root:
-
-### Format
+## Install
 
 ```bash
-gofmt -w .
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
 ```
 
-Formats all Go source files before committing.
+This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
+Go 1.22+.
 
-### Build
-
-```bash
-go build ./...
-```
-
-Builds every package in the module.
-
-To build the CLI once it is added:
+### From source
 
 ```bash
+git clone https://github.com/DevShedLabs/csvx-cli.git
+cd csvx-cli
 go build -o bin/csvx ./cmd/csvx
+./bin/csvx --help
 ```
 
-### Test
+## Usage
 
-```bash
-go test ./...
-```
-
-Runs all unit and package tests.
-
-Run tests with the race detector:
-
-```bash
-go test -race ./...
-```
-
-Run a specific test:
-
-```bash
-go test -run TestLoadCSVBackedWorkbook ./...
-```
-
-### Coverage
-
-```bash
-go test -cover ./...
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-### Static analysis
-
-```bash
-go vet ./...
-```
-
-### Run the CLI
-
-Build the current CLI:
-
-```bash
-go build -o bin/csvx ./cmd/csvx
-```
-
-The currently supported commands are:
+Both `.csvx` ZIP files and unpacked CSVX package directories are accepted as input.
 
 ```bash
 csvx --help
 csvx version
-csvx inspect report.csvx
-csvx inspect ../csvx-spec/examples/minimal.csvx
-csvx validate report.csvx
-csvx validate ../csvx-spec/examples/minimal.csvx
-csvx validate --json ../csvx-spec/examples/minimal.csvx
-csvx package ../csvx-spec/examples/minimal.csvx --output minimal.csvx
-csvx extract minimal.csvx --output minimal-extracted
-csvx xlsx-inspect ../csvx-spec/examples/example.xlsx
-csvx xlsx-inspect --json ../csvx-spec/examples/example.xlsx
-```
 
-Both `.csvx` ZIP files and unpacked CSVX package directories are accepted. The following commands
-are planned but not implemented yet:
-
-```bash
-csvx recalc report.csvx
+# Convert a real XLSX workbook to CSVX (embeds the original for lossless recovery)
 csvx convert report.xlsx report.csvx
+
+# Recover an unmodified embedded XLSX source from a .csvx package
 csvx convert report.csvx report.xlsx
-csvx convert report.csvx report.csv
+
+# Inspect a package
+csvx inspect report.csvx
+csvx inspect report.csvx --json    # not yet supported on inspect; use validate --json below
+
+# Validate a package (structural load-based check; see "Validation" below)
+csvx validate report.csvx
+csvx validate --json report.csvx
+
+# Round-trip a package as a directory for manual editing
+csvx extract report.csvx --output report-unpacked
+# ... edit CSV/.meta.json files by hand ...
+csvx package report-unpacked --output report-edited.csvx
+
+# Inspect an XLSX file before converting it (no macros or external links are ever executed)
+csvx xlsx-inspect report.xlsx
+csvx xlsx-inspect --json report.xlsx
 ```
 
-### Dependency and module maintenance
+### Validation
+
+`csvx validate` today performs a structural, load-based check — it confirms the package parses
+(required entries present, CSV/JSON well-formed). It does **not** yet validate against
+`../csvx-spec/schemas/*.json`. For real schema-conformance checking, use the reference validator
+until `validate` grows native JSON Schema support (tracked in `handoff.md`):
 
 ```bash
-go mod tidy
-go list -m all
-go version
+cd ../csvx-spec/validator
+npm install
+node bin/csvx-validate.mjs path/to/report.csvx
 ```
 
-`go mod tidy` should be run when imports change. Review its changes before committing.
+## Development
 
-## Development workflow
+```bash
+go build ./...          # build every package
+go vet ./...             # static analysis
+go test ./...            # run all tests, including the real end-to-end CLI tests (see below)
+go test -race ./...
+gofmt -w .               # format before committing
+```
 
-1. Update the relevant specification in `../csvx-spec/`.
-2. Add or update a conformance fixture.
-3. Implement the behavior in the engine.
-4. Run `gofmt`, `go vet`, and `go test ./...`.
-5. Document any intentionally unsupported behavior.
-6. Confirm that CSV data and metadata sidecars remain round-trip safe.
+### Testing
 
-Do not treat engine behavior as a specification change without updating the specification repository.
+Tests here run against real fixture files and the real compiled binary, not hand-invented minimal
+data — see `../csvx-spec/AGENTS.md` rule 4.7 for why that's required, not optional. Concretely:
 
+- `cmd/csvx/cli_e2e_test.go` builds the actual `csvx` binary and drives it as a subprocess with real
+  arguments against a real XLSX fixture (`../csvx-spec/examples/example.xlsx`), checking actual
+  stdout and exit codes through the full `convert → validate → inspect → extract → package →
+  validate` chain.
+- `cmd/csvx/interop_test.go` is the runner for `../csvx-spec/tests/interop/`: it converts that same
+  real fixture and checks specific cell values/formulas/styles at known coordinates, *and* schema-
+  validates the real output by shelling out to `../csvx-spec/validator` — both checks run as part
+  of the same `go test`.
+
+Both require a sibling `../csvx-spec` checkout (with `validator/`'s `npm install` already run for
+the schema-validation half) to find their fixtures; they skip cleanly if that checkout isn't found.
+
+## Dependency on csvx-go
+
+This repo depends on `github.com/DevShedLabs/csvx-go` as an ordinary Go module dependency — not a
+vendored copy, not a local `replace` directive. If you're developing both repos side by side and
+want changes in a local `csvx-go` checkout picked up immediately, add your own temporary
+`replace github.com/DevShedLabs/csvx-go => ../csvx-go` line — just don't commit it; a committed
+local-path `replace` breaks `go install` for everyone else (this shipped once already; don't repeat
+it).
+
+## Current scope
+
+- `inspect`, `validate`, `package`, `extract`, `xlsx-inspect`, `convert`, `version`
+- Planned: `create`, `export`/`import` as first-class names (see `handoff.md`), `codegen`, and
+  `gen test.csvx` — see `AGENTS.md` for what each is responsible for.
+
+Formula parsing and recalculation are not implemented yet (that's `csvx-go`'s scope, not this
+repo's — see its own README/handoff).
