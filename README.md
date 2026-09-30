@@ -14,6 +14,21 @@ go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
 This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
 Go 1.22+.
 
+This module has no version tags yet, so `@latest` resolves against `proxy.golang.org`'s cache of
+the default branch, which can lag a few minutes behind a fresh push. If `go install` fails right
+after a push (especially with a `replace directives` error referencing an old commit), that's
+proxy staleness, not a real problem — either wait a few minutes and retry, or bypass the proxy:
+
+```bash
+GOPROXY=direct GOSUMDB=off go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
+```
+
+or pin the exact commit to skip `@latest` resolution entirely:
+
+```bash
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@<commit-sha>
+```
+
 ### From source
 
 ```bash
