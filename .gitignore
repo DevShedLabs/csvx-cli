@@ -15,11 +15,15 @@ coverage.out
 coverage.html
 *.prof
 
-# Temporary and generated files
+# Temporary files
 /tmp/
 /temp/
 *.ถmp
-*.generated.go
+
+# Note: generated Go source (e.g. from `codegen`) is intentionally not blanket-ignored here — if
+# this repo ever commits generated code, it should be committed on purpose, not silently dropped.
+# See ../csvx-go's .gitignore for why: a fresh clone must be able to `go build` without consumers
+# running codegen themselves.
 
 # Local CSVX packages and inspection output
 *.csvx
@@ -45,3 +49,6 @@ Thumbs.db
 *~
 
 handoff.md 
+
+# Stray root-level binary from 'go build ./...' picking up cmd/csvx as a main package
+/csvx
