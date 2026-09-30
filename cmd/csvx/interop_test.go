@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -69,6 +70,36 @@ func findSheetByName(t *testing.T, workbook *csvx.Workbook, name string) *csvx.S
 	}
 	t.Fatalf("sheet %q not found", name)
 	return nil
+}
+
+// validateAgainstSchema calls the canonical schema validator (csvx-spec/validator) on a real
+// output file. Per csvx-spec/AGENTS.md rule 3.3, engines and the CLI must not reimplement JSON
+// Schema validation themselves — this is the one place that logic runs, and it must actually run
+// as part of the test, not be left as a comment for a human to remember.
+func validateAgainstSchema(t *testing.T, packagePath string) {
+	t.Helper()
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatalf("schema validation requires node on PATH (see csvx-spec/validator/README.md): %v", err)
+	}
+	validatorDir := filepath.Join("..", "..", "..", "csvx-spec", "validator")
+	validatorBin := filepath.Join(validatorDir, "bin", "csvx-validate.mjs")
+	if _, err := os.Stat(validatorBin); err != nil {
+		t.Skipf("schema validator not found at %s (expected a sibling csvx-spec checkout): %v", validatorBin, err)
+	}
+	if _, err := os.Stat(filepath.Join(validatorDir, "node_modules")); err != nil {
+		t.Fatalf("csvx-spec/validator dependencies not installed — run `npm install` in %s: %v", validatorDir, err)
+	}
+	absPackagePath, err := filepath.Abs(packagePath)
+	if err != nil {
+		t.Fatalf("resolve package path: %v", err)
+	}
+	cmd := exec.Command(nodePath, "bin/csvx-validate.mjs", absPackagePath)
+	cmd.Dir = validatorDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("schema validation failed for %s:\n%s", packagePath, output)
+	}
 }
 
 func findStyleByID(t *testing.T, workbook *csvx.Workbook, id string) csvx.Style {
@@ -171,6 +202,6 @@ func TestXLSXToCSVXInteropVector(t *testing.T) {
 	}
 
 	if vector.Expected.SchemaValid {
-		t.Logf("note: schema validity for %s is checked separately via csvx-spec/validator, not by this Go test — see csvx-spec/tests/interop/README.md", outputPath)
+		validateAgainstSchema(t, outputPath)
 	}
 }
