@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -127,6 +128,60 @@ func TestCLIEndToEnd_GenTestCSVXProducesSchemaValidFixture(t *testing.T) {
 	}
 	if len(workbook.Styles) == 0 {
 		t.Errorf("generated fixture has no styles")
+	}
+}
+
+// TestCLIEndToEnd_CodegenTSProducesValidTypeScript checks --lang ts end to end: it must produce a
+// file that actually type-checks (not just "ran without error"), and running it twice must produce
+// byte-identical output — the dedup logic in splitTopLevelDeclarations is the part most likely to
+// regress silently (e.g. two schemas disagreeing about a shared type would otherwise produce
+// duplicate, non-identical declarations that fail to compile). Skips without a sibling csvx-spec
+// checkout or without json2ts/tsc on PATH, matching the skip convention used elsewhere in this file.
+func TestCLIEndToEnd_CodegenTSProducesValidTypeScript(t *testing.T) {
+	schemaDir := filepath.Join("..", "..", "..", "csvx-spec", "schemas")
+	if _, err := os.Stat(schemaDir); err != nil {
+		t.Skipf("csvx-spec schemas not found at %s (expected a sibling checkout): %v", schemaDir, err)
+	}
+	if _, err := exec.LookPath("json2ts"); err != nil {
+		t.Skip("json2ts not installed on PATH (npm install -g json-schema-to-typescript)")
+	}
+
+	tempDir := t.TempDir()
+	firstOutput := filepath.Join(tempDir, "generated.ts")
+	stdout, stderr, code := runCLI(t, "codegen", "--lang", "ts", "--schema-dir", schemaDir, "--out", firstOutput)
+	if code != 0 {
+		t.Fatalf("codegen --lang ts failed: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	firstBytes, err := os.ReadFile(firstOutput)
+	if err != nil {
+		t.Fatalf("read codegen output: %v", err)
+	}
+
+	secondOutput := filepath.Join(tempDir, "generated-again.ts")
+	if _, stderr, code := runCLI(t, "codegen", "--lang", "ts", "--schema-dir", schemaDir, "--out", secondOutput); code != 0 {
+		t.Fatalf("second codegen --lang ts run failed: code=%d\nstderr=%s", code, stderr)
+	}
+	secondBytes, err := os.ReadFile(secondOutput)
+	if err != nil {
+		t.Fatalf("read second codegen output: %v", err)
+	}
+	if string(firstBytes) != string(secondBytes) {
+		t.Fatalf("codegen --lang ts is not deterministic: two runs over the same schemas produced different output")
+	}
+
+	for _, want := range []string{"CSVXManifest", "CSVXWorkbook", "CSVXStyles", "CSVXSheetMetadata", "CSVXFormulaCell", "interface Value", "type Id ="} {
+		if !strings.Contains(string(firstBytes), want) {
+			t.Errorf("generated TypeScript missing expected declaration containing %q", want)
+		}
+	}
+
+	if tscPath, err := exec.LookPath("tsc"); err == nil {
+		cmd := exec.Command(tscPath, "--noEmit", "--strict", firstOutput)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("generated TypeScript failed to type-check: %v\n%s", err, output)
+		}
+	} else {
+		t.Log("tsc not on PATH; skipped type-checking the generated file (ran and compared output only)")
 	}
 }
 
