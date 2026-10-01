@@ -4,11 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	csvx "github.com/DevShedLabs/csvx-go"
 )
 
-const version = "0.1.0-dev"
+// version is read from the module's own build info rather than hardcoded, so it can't drift from
+// the git tag the way a literal string constant just did: v0.1.1 was tagged on a commit that still
+// said "0.1.0-dev". `go install .../csvx@vX.Y.Z` and `go build` both populate this; a plain `go run`
+// or a build from a checkout with no VCS info does not, hence the fallback.
+func version() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+	return info.Main.Version
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -21,7 +32,7 @@ func main() {
 		return
 	}
 	if isVersion(os.Args[1]) {
-		fmt.Printf("csvx %s\n", version)
+		fmt.Printf("csvx %s\n", version())
 		return
 	}
 
