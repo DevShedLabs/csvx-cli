@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 
@@ -21,7 +20,7 @@ func main() {
 		printHelp(os.Stdout)
 		return
 	}
-	if os.Args[1] == "version" {
+	if isVersion(os.Args[1]) {
 		fmt.Printf("csvx %s\n", version)
 		return
 	}
@@ -50,24 +49,17 @@ func main() {
 		return
 	}
 
-	flags := flag.NewFlagSet(command, flag.ContinueOnError)
-	flags.SetOutput(os.Stderr)
-	help := flags.Bool("help", false, "show command help")
-	jsonOutput := flags.Bool("json", false, "write machine-readable JSON")
-	if err := flags.Parse(os.Args[2:]); err != nil {
-		os.Exit(2)
-	}
-	if *help {
-		printCommandHelp(os.Stdout, command)
-		return
-	}
-	if flags.NArg() != 1 {
-		fmt.Fprintf(os.Stderr, "csvx %s: expected exactly one input path\n\n", command)
+	filename, help, jsonOutput, err := parseInputArguments(os.Args[2:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx %s: %v\n\n", command, err)
 		printCommandHelp(os.Stderr, command)
 		os.Exit(2)
 	}
+	if help {
+		printCommandHelp(os.Stdout, command)
+		return
+	}
 
-	filename := flags.Arg(0)
 	workbook, err := openInput(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "csvx %s: %v\n", command, err)
@@ -82,7 +74,7 @@ func main() {
 		}
 	case "validate":
 		result := csvx.Validate(filename)
-		if *jsonOutput {
+		if jsonOutput {
 			if err := printJSON(result); err != nil {
 				fmt.Fprintf(os.Stderr, "csvx validate: %v\n", err)
 				os.Exit(1)
@@ -191,33 +183,59 @@ func parseExtractArguments(arguments []string) (string, string, bool, error) {
 
 func runConvert(arguments []string) {
 	input, output, showHelp, err := parseConvertArguments(arguments)
-	if err != nil { fmt.Fprintf(os.Stderr, "csvx convert: %v\n\n", err); printCommandHelp(os.Stderr, "convert"); os.Exit(2) }
-	if showHelp { printCommandHelp(os.Stdout, "convert"); return }
-	if err := csvx.Convert(input, output); err != nil { fmt.Fprintf(os.Stderr, "csvx convert: %v\n", err); os.Exit(1) }
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx convert: %v\n\n", err)
+		printCommandHelp(os.Stderr, "convert")
+		os.Exit(2)
+	}
+	if showHelp {
+		printCommandHelp(os.Stdout, "convert")
+		return
+	}
+	if err := csvx.Convert(input, output); err != nil {
+		fmt.Fprintf(os.Stderr, "csvx convert: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("created: %s\n", output)
 }
 
 func parseConvertArguments(arguments []string) (string, string, bool, error) {
-	if len(arguments) == 1 && (arguments[0] == "--help" || arguments[0] == "-h") { return "", "", true, nil }
-	if len(arguments) != 2 { return "", "", false, fmt.Errorf("provide an input file and output file") }
+	if len(arguments) == 1 && (arguments[0] == "--help" || arguments[0] == "-h") {
+		return "", "", true, nil
+	}
+	if len(arguments) != 2 {
+		return "", "", false, fmt.Errorf("provide an input file and output file")
+	}
 	return arguments[0], arguments[1], false, nil
 }
 
 func runXLSXInspect(arguments []string) {
-	flags := flag.NewFlagSet("xlsx-inspect", flag.ContinueOnError)
-	flags.SetOutput(os.Stderr)
-	jsonOutput := flags.Bool("json", false, "write machine-readable JSON")
-	if err := flags.Parse(arguments); err != nil { os.Exit(2) }
-	if flags.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "csvx xlsx-inspect: expected exactly one input .xlsx path")
+	filename, help, jsonOutput, err := parseInputArguments(arguments)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx xlsx-inspect: %v\n\n", err)
 		printCommandHelp(os.Stderr, "xlsx-inspect")
 		os.Exit(2)
 	}
-	inspection, err := csvx.InspectXLSX(flags.Arg(0))
-	if err != nil { fmt.Fprintf(os.Stderr, "csvx xlsx-inspect: %v\n", err); os.Exit(1) }
-	if *jsonOutput { if err := printJSON(inspection); err != nil { fmt.Fprintf(os.Stderr, "csvx xlsx-inspect: %v\n", err); os.Exit(1) }; return }
+	if help {
+		printCommandHelp(os.Stdout, "xlsx-inspect")
+		return
+	}
+	inspection, err := csvx.InspectXLSX(filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx xlsx-inspect: %v\n", err)
+		os.Exit(1)
+	}
+	if jsonOutput {
+		if err := printJSON(inspection); err != nil {
+			fmt.Fprintf(os.Stderr, "csvx xlsx-inspect: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	fmt.Printf("XLSX: %s\nSHA-256: %s\nSheets: %d\nResources: %d\n", inspection.Filename, inspection.SHA256, len(inspection.Sheets), len(inspection.Resources))
-	for _, warning := range inspection.Warnings { fmt.Printf("[%s] %s: %s\n", warning.Severity, warning.Feature, warning.Message) }
+	for _, warning := range inspection.Warnings {
+		fmt.Printf("[%s] %s: %s\n", warning.Severity, warning.Feature, warning.Message)
+	}
 }
 
 func openInput(filename string) (*csvx.Workbook, error) {
@@ -233,6 +251,37 @@ func openInput(filename string) (*csvx.Workbook, error) {
 
 func isHelp(argument string) bool {
 	return argument == "--help" || argument == "-h" || argument == "help"
+}
+
+// isVersion recognizes both the common CLI convention (--version / -v) and the original "version"
+// subcommand, which is kept for backward compatibility.
+func isVersion(argument string) bool {
+	return argument == "--version" || argument == "-v" || argument == "version"
+}
+
+// parseInputArguments parses the shared `[flags] <input>` shape used by inspect and validate. It
+// scans every argument for flags regardless of position, unlike Go's flag package, which stops
+// recognizing flags as soon as it sees the first positional argument — meaning
+// `csvx validate example.csvx --json` would otherwise fail while `csvx validate --json
+// example.csvx` works, which is a real usability bug, not an acceptable CLI convention.
+func parseInputArguments(arguments []string) (filename string, help bool, jsonOutput bool, err error) {
+	for _, argument := range arguments {
+		switch argument {
+		case "--help", "-h":
+			help = true
+		case "--json":
+			jsonOutput = true
+		default:
+			if filename != "" {
+				return "", false, false, fmt.Errorf("expected exactly one input path, got %q", argument)
+			}
+			filename = argument
+		}
+	}
+	if !help && filename == "" {
+		return "", false, false, fmt.Errorf("expected exactly one input path")
+	}
+	return filename, help, jsonOutput, nil
 }
 
 func printJSON(value any) error {
@@ -254,9 +303,12 @@ func printHelp(output *os.File) {
 	fmt.Fprintln(output, "  extract    Extract a .csvx ZIP file into an unpacked directory")
 	fmt.Fprintln(output, "  xlsx-inspect Inspect an XLSX package and report detected features")
 	fmt.Fprintln(output, "  convert    Convert XLSX to CSVX or recover embedded XLSX source")
-	fmt.Fprintln(output, "  version    Print the CLI version")
+	fmt.Fprintln(output, "")
+	fmt.Fprintln(output, "  --version, -v    Print the CLI version")
+	fmt.Fprintln(output, "  --help, -h       Show this help")
 	fmt.Fprintln(output, "")
 	fmt.Fprintln(output, "Input may be a .csvx ZIP file or an unpacked CSVX directory.")
+	fmt.Fprintln(output, "Flags may appear before or after the input path.")
 	fmt.Fprintln(output, "Use 'csvx <command> --help' for command-specific help.")
 }
 

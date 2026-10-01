@@ -8,25 +8,17 @@ exists and what belongs where.
 ## Install
 
 ```bash
-go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.0
 ```
 
 This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
-Go 1.22+.
-
-This module has no version tags yet, so `@latest` resolves against `proxy.golang.org`'s cache of
-the default branch, which can lag a few minutes behind a fresh push. If `go install` fails right
-after a push (especially with a `replace directives` error referencing an old commit), that's
-proxy staleness, not a real problem — either wait a few minutes and retry, or bypass the proxy:
+Go 1.22+. Pin to the tag (`@v0.1.0`), not `@latest` — a tag is an exact, unambiguous reference;
+`@latest` against a module's default branch is resolved by `proxy.golang.org` and can lag behind a
+fresh push by a few minutes before a new tag exists to pin to instead. If `go install` ever fails
+right after a release with a `replace directives` error, that's proxy staleness — bypass it with:
 
 ```bash
 GOPROXY=direct GOSUMDB=off go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
-```
-
-or pin the exact commit to skip `@latest` resolution entirely:
-
-```bash
-go install github.com/DevShedLabs/csvx-cli/cmd/csvx@<commit-sha>
 ```
 
 ### From source
@@ -40,11 +32,14 @@ go build -o bin/csvx ./cmd/csvx
 
 ## Usage
 
-Both `.csvx` ZIP files and unpacked CSVX package directories are accepted as input.
+Both `.csvx` ZIP files and unpacked CSVX package directories are accepted as input. Flags may
+appear before or after the input path (`csvx validate report.csvx --json` and
+`csvx validate --json report.csvx` are equivalent) — this wasn't always true and is worth relying
+on explicitly, not just something that happens to work.
 
 ```bash
 csvx --help
-csvx version
+csvx --version    # or: csvx -v, or the original csvx version (all three work)
 
 # Convert a real XLSX workbook to CSVX (embeds the original for lossless recovery)
 csvx convert report.xlsx report.csvx
@@ -52,13 +47,13 @@ csvx convert report.xlsx report.csvx
 # Recover an unmodified embedded XLSX source from a .csvx package
 csvx convert report.csvx report.xlsx
 
-# Inspect a package
+# Inspect a package (always prints JSON; there's no non-JSON mode for inspect)
 csvx inspect report.csvx
-csvx inspect report.csvx --json    # not yet supported on inspect; use validate --json below
 
 # Validate a package (structural load-based check; see "Validation" below)
 csvx validate report.csvx
 csvx validate --json report.csvx
+csvx validate report.csvx --json   # same result, flag order doesn't matter
 
 # Round-trip a package as a directory for manual editing
 csvx extract report.csvx --output report-unpacked
@@ -121,7 +116,8 @@ it).
 
 ## Current scope
 
-- `inspect`, `validate`, `package`, `extract`, `xlsx-inspect`, `convert`, `version`
+- `inspect`, `validate`, `package`, `extract`, `xlsx-inspect`, `convert`
+- `--version`/`-v` (standard convention; `version` subcommand kept for backward compatibility)
 - Planned: `create`, `export`/`import` as first-class names (see `handoff.md`), `codegen`, and
   `gen test.csvx` — see `AGENTS.md` for what each is responsible for.
 

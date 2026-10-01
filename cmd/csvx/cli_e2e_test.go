@@ -135,3 +135,53 @@ func TestCLIEndToEnd_ValidateRejectsMissingFile(t *testing.T) {
 		t.Fatalf("expected an error message on stderr for a missing file")
 	}
 }
+
+// TestCLIEndToEnd_FlagOrderIsNotSignificant is a direct regression test for a real usability bug:
+// `csvx validate --json example.csvx` worked but `csvx validate example.csvx --json` failed,
+// because Go's flag package stops recognizing flags after the first positional argument. Both
+// orderings must produce identical, successful output.
+func TestCLIEndToEnd_FlagOrderIsNotSignificant(t *testing.T) {
+	input := exampleXLSXPath(t)
+	tempDir := t.TempDir()
+	packagePath := filepath.Join(tempDir, "example.csvx")
+	if _, stderr, code := runCLI(t, "convert", input, packagePath); code != 0 {
+		t.Fatalf("setup convert failed: code=%d\nstderr=%s", code, stderr)
+	}
+
+	flagFirst, _, codeFlagFirst := runCLI(t, "validate", "--json", packagePath)
+	flagLast, stderrFlagLast, codeFlagLast := runCLI(t, "validate", packagePath, "--json")
+
+	if codeFlagFirst != 0 {
+		t.Fatalf("validate --json <file> failed unexpectedly: code=%d", codeFlagFirst)
+	}
+	if codeFlagLast != 0 {
+		t.Fatalf("validate <file> --json failed: code=%d\nstderr=%s (this is the exact bug being tested for)", codeFlagLast, stderrFlagLast)
+	}
+	if flagFirst != flagLast {
+		t.Fatalf("flag order changed output:\n--json first: %s\n--json last: %s", flagFirst, flagLast)
+	}
+
+	// Same check for xlsx-inspect, which had the identical bug.
+	jsonFirst, _, codeJSONFirst := runCLI(t, "xlsx-inspect", "--json", input)
+	jsonLast, stderrJSONLast, codeJSONLast := runCLI(t, "xlsx-inspect", input, "--json")
+	if codeJSONFirst != 0 || codeJSONLast != 0 {
+		t.Fatalf("xlsx-inspect flag order check failed: first=%d last=%d\nstderr=%s", codeJSONFirst, codeJSONLast, stderrJSONLast)
+	}
+	if jsonFirst != jsonLast {
+		t.Fatalf("xlsx-inspect flag order changed output:\nflag first: %s\nflag last: %s", jsonFirst, jsonLast)
+	}
+}
+
+// TestCLIEndToEnd_VersionFlag checks the standard --version/-v convention works, alongside the
+// original "version" subcommand kept for backward compatibility.
+func TestCLIEndToEnd_VersionFlag(t *testing.T) {
+	for _, args := range [][]string{{"--version"}, {"-v"}, {"version"}} {
+		stdout, stderr, code := runCLI(t, args...)
+		if code != 0 {
+			t.Fatalf("csvx %v failed: code=%d\nstderr=%s", args, code, stderr)
+		}
+		if stdout == "" {
+			t.Fatalf("csvx %v produced no output", args)
+		}
+	}
+}
