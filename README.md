@@ -88,6 +88,25 @@ go test -race ./...
 gofmt -w .               # format before committing
 ```
 
+### Pre-push checks (local, since GitHub Actions minutes are limited)
+
+`scripts/check.sh` runs the same checks CI would (`gofmt`, `go vet`, `go build`, `go test` —
+including the real end-to-end and schema-validation tests below). Run it any time:
+
+```bash
+./scripts/check.sh
+```
+
+A git hook runs it automatically before every push, blocking the push if it fails. Enable it once
+per clone (this is local git config, not something that comes from cloning the repo):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Skip in a genuine emergency with `git push --no-verify` — prefer fixing the failure instead. See
+`../csvx-spec/AGENTS.md` section 6 for why this exists: it's the interim stand-in for real CI.
+
 ### Testing
 
 Tests here run against real fixture files and the real compiled binary, not hand-invented minimal
