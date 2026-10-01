@@ -40,7 +40,8 @@ func main() {
 	knownCommands := map[string]bool{
 		"inspect": true, "validate": true, "package": true, "extract": true,
 		"xlsx-inspect": true, "convert": true, "create": true, "import": true,
-		"export": true, "codegen": true, "gen": true,
+		"export": true, "codegen": true, "gen": true, "tags": true, "update": true,
+		"self-update": true,
 	}
 	if !knownCommands[command] {
 		fmt.Fprintf(os.Stderr, "csvx: unknown command %q\n\n", command)
@@ -82,6 +83,18 @@ func main() {
 	}
 	if command == "gen" {
 		runGen(os.Args[2:])
+		return
+	}
+	if command == "tags" {
+		runTags(os.Args[2:])
+		return
+	}
+	if command == "update" {
+		runUpdate(os.Args[2:])
+		return
+	}
+	if command == "self-update" {
+		runSelfUpdate(os.Args[2:])
 		return
 	}
 
@@ -344,6 +357,9 @@ func printHelp(output *os.File) {
 	fmt.Fprintln(output, "  convert    Convert XLSX to CSVX or recover embedded XLSX source (generic; prefer import/export)")
 	fmt.Fprintln(output, "  codegen    Regenerate an engine's data model from csvx-spec/schemas")
 	fmt.Fprintln(output, "  gen test.csvx  Generate a schema-exhaustive CSVX fixture")
+	fmt.Fprintln(output, "  tags       List recent tagged versions of an engine module (default: csvx-go)")
+	fmt.Fprintln(output, "  update     Pin an engine module to a specific tagged version")
+	fmt.Fprintln(output, "  self-update  Reinstall csvx itself at the latest (or a given) tagged version")
 	fmt.Fprintln(output, "")
 	fmt.Fprintln(output, "  --version, -v    Print the CLI version")
 	fmt.Fprintln(output, "  --help, -h       Show this help")
@@ -419,5 +435,28 @@ func printCommandHelp(output *os.File, command string) {
 		fmt.Fprintln(output, "validation rule type — derived from csvx-spec/schemas and spec/04-data-types.md, not from")
 		fmt.Fprintln(output, "copying the small hand-authored examples/ fixtures (see csvx-spec/AGENTS.md rule 4.4).")
 		fmt.Fprintln(output, "Output is a directory unless <path> ends in .csvx. Default output is ./test.csvx.")
+	case "tags":
+		fmt.Fprintln(output, "Usage: csvx tags [--module <path>]")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Lists the 5 most recent tagged versions of an engine module (default")
+		fmt.Fprintln(output, "github.com/DevShedLabs/csvx-go), queried directly from its VCS host rather than through the")
+		fmt.Fprintln(output, "Go module proxy's cache — a tag pushed minutes ago can otherwise look invisible until the")
+		fmt.Fprintln(output, "proxy's cached version list expires. Run from within the Go module you want to update.")
+	case "update":
+		fmt.Fprintln(output, "Usage: csvx update [--module <path>] <version>")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Pins an engine module (default github.com/DevShedLabs/csvx-go) to an exact tagged version —")
+		fmt.Fprintln(output, "see 'csvx tags' to list recent ones. Runs 'go get <module>@<version>', then 'go mod tidy',")
+		fmt.Fprintln(output, "then 'go build ./...' as a smoke check, all bypassing the module proxy cache the same way")
+		fmt.Fprintln(output, "'csvx tags' does. Deliberately takes an exact version, never 'latest' — that's what makes")
+		fmt.Fprintln(output, "stale-proxy-cache surprises go away: you see the real tag list first, then pin one exactly.")
+		fmt.Fprintln(output, "Run from within the Go module whose dependency you want to update.")
+	case "self-update":
+		fmt.Fprintln(output, "Usage: csvx self-update [version]")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Reinstalls the csvx binary itself via 'go install', bypassing the module proxy cache. With")
+		fmt.Fprintln(output, "no argument, resolves the real latest csvx-cli tag directly from its VCS host first (never")
+		fmt.Fprintln(output, "passing the literal '@latest' to go install, which is exactly what gets stuck on a stale")
+		fmt.Fprintln(output, "cached resolution) and installs that exact version. Pass an exact tag (e.g. v0.1.3) to pin one.")
 	}
 }

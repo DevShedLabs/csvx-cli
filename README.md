@@ -21,6 +21,38 @@ right after a release with a `replace directives` error, that's proxy staleness 
 GOPROXY=direct GOSUMDB=off go install github.com/DevShedLabs/csvx-cli/cmd/csvx@latest
 ```
 
+Once you have any version installed, `csvx self-update` automates exactly this workaround for you
+going forward — see "Updating" below.
+
+## Updating
+
+Three commands manage version pins, and all three deliberately resolve versions *directly against
+GitHub* rather than through `proxy.golang.org` — the public Go module proxy caches both "what
+versions exist" and module contents for a meaningful TTL, so a tag pushed minutes ago can be
+invisible to a plain `go get`/`go install` (including `@latest`) until that cache expires. None of
+these three ever pass the literal string `@latest` to `go get`/`go install` for exactly that reason;
+`tags` resolves the real version list first, then the others pin an exact, unambiguous tag.
+
+```bash
+# List the 5 most recent tags of an engine module (default: csvx-go)
+csvx tags
+csvx tags --module github.com/DevShedLabs/csvx-cli
+
+# Pin a dependency in the current Go module's go.mod to an exact tag, then `go mod tidy` and
+# `go build ./...` as a smoke check — run this from inside the project depending on the engine
+csvx update v0.1.3
+csvx update --module github.com/DevShedLabs/csvx-go v0.1.1
+
+# Reinstall the csvx binary itself. With no argument, resolves the true latest csvx-cli tag
+# directly (never the cached "@latest") and installs exactly that version; pass a tag to pin one.
+csvx self-update
+csvx self-update v0.1.1
+```
+
+`update` and `self-update` are different operations: `update` edits a dependency pin inside some
+*other* Go module's `go.mod` (e.g. bumping `csvx-go` inside a project that imports it); `self-update`
+replaces the `csvx` binary itself via `go install` and has no `go.mod` of its own to edit.
+
 ### From source
 
 ```bash
@@ -136,6 +168,7 @@ it).
 ## Current scope
 
 - `inspect`, `validate`, `package`, `extract`, `xlsx-inspect`, `convert`
+- `tags`, `update`, `self-update` — see "Updating" above
 - `--version`/`-v` (standard convention; `version` subcommand kept for backward compatibility)
 - Planned: `create`, `export`/`import` as first-class names (see `handoff.md`), `codegen`, and
   `gen test.csvx` — see `AGENTS.md` for what each is responsible for.
