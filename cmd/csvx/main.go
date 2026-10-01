@@ -26,7 +26,12 @@ func main() {
 	}
 
 	command := os.Args[1]
-	if command != "inspect" && command != "validate" && command != "package" && command != "extract" && command != "xlsx-inspect" && command != "convert" {
+	knownCommands := map[string]bool{
+		"inspect": true, "validate": true, "package": true, "extract": true,
+		"xlsx-inspect": true, "convert": true, "create": true, "import": true,
+		"export": true, "codegen": true, "gen": true,
+	}
+	if !knownCommands[command] {
 		fmt.Fprintf(os.Stderr, "csvx: unknown command %q\n\n", command)
 		printHelp(os.Stderr)
 		os.Exit(2)
@@ -46,6 +51,26 @@ func main() {
 	}
 	if command == "convert" {
 		runConvert(os.Args[2:])
+		return
+	}
+	if command == "create" {
+		runCreate(os.Args[2:])
+		return
+	}
+	if command == "import" {
+		runImport(os.Args[2:])
+		return
+	}
+	if command == "export" {
+		runExport(os.Args[2:])
+		return
+	}
+	if command == "codegen" {
+		runCodegen(os.Args[2:])
+		return
+	}
+	if command == "gen" {
+		runGen(os.Args[2:])
 		return
 	}
 
@@ -297,12 +322,17 @@ func printHelp(output *os.File) {
 	fmt.Fprintln(output, "  csvx <command> [options] <input>")
 	fmt.Fprintln(output, "")
 	fmt.Fprintln(output, "Commands:")
+	fmt.Fprintln(output, "  create     Scaffold a new, minimal, schema-valid CSVX package")
+	fmt.Fprintln(output, "  import     Import an XLSX file as a new CSVX package")
+	fmt.Fprintln(output, "  export     Export a CSVX package's embedded original to XLSX")
 	fmt.Fprintln(output, "  inspect    Print the loaded workbook as JSON")
 	fmt.Fprintln(output, "  validate   Load and validate a CSVX package")
 	fmt.Fprintln(output, "  package    Package an unpacked directory into a .csvx ZIP file")
 	fmt.Fprintln(output, "  extract    Extract a .csvx ZIP file into an unpacked directory")
 	fmt.Fprintln(output, "  xlsx-inspect Inspect an XLSX package and report detected features")
-	fmt.Fprintln(output, "  convert    Convert XLSX to CSVX or recover embedded XLSX source")
+	fmt.Fprintln(output, "  convert    Convert XLSX to CSVX or recover embedded XLSX source (generic; prefer import/export)")
+	fmt.Fprintln(output, "  codegen    Regenerate an engine's data model from csvx-spec/schemas")
+	fmt.Fprintln(output, "  gen test.csvx  Generate a schema-exhaustive CSVX fixture")
 	fmt.Fprintln(output, "")
 	fmt.Fprintln(output, "  --version, -v    Print the CLI version")
 	fmt.Fprintln(output, "  --help, -h       Show this help")
@@ -339,5 +369,38 @@ func printCommandHelp(output *os.File, command string) {
 		fmt.Fprintln(output, "Usage: csvx convert <input.xlsx|csvx> <output.csvx|xlsx>")
 		fmt.Fprintln(output, "")
 		fmt.Fprintln(output, "Imports XLSX with embedded source preservation, or recovers an unchanged embedded XLSX source.")
+		fmt.Fprintln(output, "Prefer 'csvx import' / 'csvx export', which validate the expected direction explicitly.")
+	case "create":
+		fmt.Fprintln(output, "Usage: csvx create [--sheet <name>] <output>")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Scaffolds a new, minimal, schema-valid CSVX package at <output>: a directory if it has no")
+		fmt.Fprintln(output, ".csvx extension, or a packaged .csvx ZIP file if it does.")
+	case "import":
+		fmt.Fprintln(output, "Usage: csvx import <input.xlsx> <output.csvx>")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Imports an XLSX file as a new CSVX package, preserving the original as embedded source.")
+	case "export":
+		fmt.Fprintln(output, "Usage: csvx export <input.csvx> <output.xlsx>")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Recovers the unmodified XLSX source embedded in a CSVX package produced by 'csvx import'.")
+		fmt.Fprintln(output, "Exporting an edited/arbitrary CSVX workbook to XLSX is not implemented yet (open gap, see")
+		fmt.Fprintln(output, "csvx-spec/AGENTS.md rule 4.5).")
+	case "codegen":
+		fmt.Fprintln(output, "Usage: csvx codegen --lang go --schema-dir <path> --out <file.go> [--package <name>]")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Regenerates an engine's data model from csvx-spec/schemas/*.schema.json, mechanically,")
+		fmt.Fprintln(output, "instead of hand-typing structs that can drift from the schema (see csvx-spec/AGENTS.md rule 3.1).")
+		fmt.Fprintln(output, "Requires go-jsonschema on PATH (`go install github.com/atombender/go-jsonschema@latest`).")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Example (from a csvx-go checkout):")
+		fmt.Fprintln(output, "  csvx codegen --lang go --schema-dir ../csvx-spec/schemas --out internal/schema/generated.go")
+	case "gen":
+		fmt.Fprintln(output, "Usage: csvx gen test.csvx [--output <path>]")
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Generates a schema-exhaustive CSVX fixture covering every scalar type, every core error")
+		fmt.Fprintln(output, "code, every style property, multiple sheets, a representative formula set, and every")
+		fmt.Fprintln(output, "validation rule type — derived from csvx-spec/schemas and spec/04-data-types.md, not from")
+		fmt.Fprintln(output, "copying the small hand-authored examples/ fixtures (see csvx-spec/AGENTS.md rule 4.4).")
+		fmt.Fprintln(output, "Output is a directory unless <path> ends in .csvx. Default output is ./test.csvx.")
 	}
 }
