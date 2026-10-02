@@ -1,4 +1,4 @@
-github.com/DevShedLabs/csvx-go v0.1.5 h1:x3LBkGF28S5fekiySED7yIGWfK+CHV6AVv+/JTbPFAs=
-github.com/DevShedLabs/csvx-go v0.1.5/go.mod h1:qvRE0kePuBssRM9bU/yb9hl+LM3MPazSqaI14+W8hQ8=
+github.com/DevShedLabs/csvx-go v0.1.10 h1:DaZIJ9kD66Q2y2yyTfZJa2ugYadoCz2KrFEei/NbZGw=
+github.com/DevShedLabs/csvx-go v0.1.10/go.mod h1:qvRE0kePuBssRM9bU/yb9hl+LM3MPazSqaI14+W8hQ8=
 github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
 github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
