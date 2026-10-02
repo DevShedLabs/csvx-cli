@@ -5,10 +5,16 @@ binary. It calls into engine libraries (`csvx-go` today) for the actual load/edi
 work rather than reimplementing it; see `AGENTS.md` and `../csvx-spec/AGENTS.md` for why that split
 exists and what belongs where.
 
+## Internal 
+> This project uses the CSVX Spec and Go engine
+
+- [CSVX Spec](https://github.com/DevShedLabs/csvx-spec)
+- [Go Engine](https://github.com/DevShedLabs/csvx-go)
+
 ## Install
 
 ```bash
-go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.0
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.8
 ```
 
 This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
