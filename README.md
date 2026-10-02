@@ -14,7 +14,7 @@ exists and what belongs where.
 ## Install
 
 ```bash
-go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.9
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.11
 ```
 
 This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
