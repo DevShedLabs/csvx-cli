@@ -124,6 +124,18 @@ func listModuleVersions(module string) ([]string, error) {
 	return result.Versions, nil
 }
 
+// inGoProjectDependingOn reports whether the current directory is inside a Go module other than
+// `module` itself — i.e. one where `go get module@version` can actually pin it. Outside any module,
+// `go list -m` still succeeds (reporting "command-line-arguments"), so GOMOD is checked first.
+func inGoProjectDependingOn(module string) bool {
+	gomod, err := exec.Command("go", "env", "GOMOD").Output()
+	if err != nil || strings.TrimSpace(string(gomod)) == "" || strings.TrimSpace(string(gomod)) == os.DevNull {
+		return false
+	}
+	mainModule, err := exec.Command("go", "list", "-m").Output()
+	return err == nil && strings.TrimSpace(string(mainModule)) != module
+}
+
 func runUpdate(arguments []string) {
 	module, version, help, err := parseUpdateArguments(arguments)
 	if err != nil {
@@ -134,6 +146,27 @@ func runUpdate(arguments []string) {
 	if help {
 		printCommandHelp(os.Stdout, "update")
 		return
+	}
+
+	// `update` pins a dependency in the *current* project's go.mod, which only makes sense inside a
+	// Go project that depends on the module (developers embedding the engine). Everywhere else —
+	// no go.mod, or inside the engine module itself, where Go reports "is in the main module" — the
+	// user almost certainly wants the csvx binary updated, so do that. Versions are not
+	// interchangeable (engine tags vs csvx-cli tags), so a version given here is not reused.
+	if !inGoProjectDependingOn(module) {
+		if version != "" {
+			fmt.Fprintf(os.Stderr, "csvx update: there is no Go project here that depends on %s, so %s can't be pinned.\n", module, version)
+			fmt.Fprintln(os.Stderr, "That version is an engine version; csvx-cli has its own. To update the csvx binary, run")
+			fmt.Fprintln(os.Stderr, "'csvx update' with no version (latest), or 'csvx self-update <csvx-cli version>'.")
+			os.Exit(1)
+		}
+		fmt.Println("No Go project depends on the engine here, so updating the csvx binary itself.")
+		runSelfUpdate(nil)
+		return
+	}
+	if version == "" {
+		fmt.Fprintln(os.Stderr, "csvx update: expected an engine version — run 'csvx tags' to see recent ones")
+		os.Exit(2)
 	}
 
 	target := module + "@" + version
@@ -247,10 +280,7 @@ func parseUpdateArguments(arguments []string) (module string, version string, he
 			version = arguments[index]
 		}
 	}
-	if version == "" {
-		return "", "", false, fmt.Errorf("expected a version — run 'csvx tags' to see recent ones")
-	}
-	if !strings.HasPrefix(version, "v") {
+	if version != "" && !strings.HasPrefix(version, "v") {
 		return "", "", false, fmt.Errorf("expected a semver tag like v0.1.3, got %q", version)
 	}
 	return module, version, false, nil
