@@ -269,7 +269,7 @@ func writeStylesFile(stagingDir string) error {
 		{"id": "numberFormat", "numberFormat": "$#,##0.00"},
 		{"id": "font", "font": {"bold": true, "italic": true, "color": "#111111", "size": 12}},
 		{"id": "fill", "fill": {"color": "#E8F0FE"}},
-		{"id": "border", "border": {"top": "thin", "bottom": "thin"}},
+		{"id": "border", "border": {"top": {"style": "thin", "color": "#000000"}, "bottom": {"style": "thin", "color": "#000000"}}},
 		{"id": "alignment", "alignment": {"horizontal": "right", "vertical": "center"}},
 		{"id": "protection", "protection": {"locked": false}},
 		{
@@ -277,7 +277,7 @@ func writeStylesFile(stagingDir string) error {
 			"numberFormat": "0.00%",
 			"font": {"bold": true},
 			"fill": {"color": "#FFF8E1"},
-			"border": {"top": "thin"},
+			"border": {"top": {"style": "thin", "color": "#000000"}},
 			"alignment": {"horizontal": "center"},
 			"protection": {"locked": true}
 		}
