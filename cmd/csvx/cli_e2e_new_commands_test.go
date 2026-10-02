@@ -232,3 +232,55 @@ func TestCLIEndToEnd_CodegenReproducesCSVXGoModel(t *testing.T) {
 			"that produced the existing file")
 	}
 }
+
+func csvFixture(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "csvx-spec", "examples", "csv", name)
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("csvx-spec CSV fixture not found at %s: %v", path, err)
+	}
+	return path
+}
+
+func TestCLIEndToEnd_ImportCSV(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "people.csvx")
+	stdout, stderr, code := runCLI(t, "import", "--infer", csvFixture(t, "people.csv"), out)
+	if code != 0 {
+		t.Fatalf("import csv failed: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "imported:") || stderr != "" {
+		t.Fatalf("unexpected output: stdout=%q stderr=%q", stdout, stderr)
+	}
+	if stdout, stderr, code := runCLI(t, "validate", out); code != 0 {
+		t.Fatalf("validate failed: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	validateAgainstSchema(t, out)
+	// Declared types must have reached the sidecar.
+	extracted := filepath.Join(t.TempDir(), "x")
+	if _, stderr, code := runCLI(t, "extract", out, "-o", extracted); code != 0 {
+		t.Fatalf("extract failed: %s", stderr)
+	}
+	meta, err := os.ReadFile(filepath.Join(extracted, "sheets", "people.meta.json"))
+	if err != nil || !strings.Contains(string(meta), `"decimal"`) || !strings.Contains(string(meta), `"date"`) {
+		t.Fatalf("expected inferred types in sidecar, got %v %s", err, meta)
+	}
+}
+
+func TestCLIEndToEnd_ImportCSVWarnsAndFails(t *testing.T) {
+	dir := t.TempDir()
+	_, stderr, code := runCLI(t, "import", "--name", "Ragged Data", csvFixture(t, "ragged.csv"), filepath.Join(dir, "r.csvx"))
+	if code != 0 || !strings.Contains(stderr, "warning: record 2") || !strings.Contains(stderr, "warning: record 3") {
+		t.Fatalf("expected success with warnings on stderr, got code=%d stderr=%q", code, stderr)
+	}
+	_, stderr, code = runCLI(t, "import", csvFixture(t, "malformed.csv"), filepath.Join(dir, "m.csvx"))
+	if code != 1 || !strings.Contains(stderr, "line 2") {
+		t.Fatalf("expected exit 1 naming line 2, got code=%d stderr=%q", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "m.csvx")); err == nil {
+		t.Fatalf("failed import must not leave an output file")
+	}
+	_, _, code = runCLI(t, "import", "--delimiter", "ab", csvFixture(t, "people.csv"), filepath.Join(dir, "d.csvx"))
+	if code != 2 {
+		t.Fatalf("expected usage error (2) for a multi-character delimiter, got %d", code)
+	}
+}

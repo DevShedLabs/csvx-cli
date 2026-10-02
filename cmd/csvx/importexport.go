@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	csvx "github.com/DevShedLabs/csvx-go"
 )
@@ -17,6 +18,10 @@ import (
 // fails with a clear message instead of a confusing one from the generic converter.
 
 func runImport(arguments []string) {
+	if isCSVImport(arguments) {
+		runImportCSV(arguments)
+		return
+	}
 	input, output, showHelp, err := parseConvertArguments(arguments)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "csvx import: %v\n\n", err)
@@ -69,4 +74,89 @@ func runExport(arguments []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("exported: %s\n", output)
+}
+
+// isCSVImport reports whether the first positional argument (skipping flag values) is a .csv file. Plain CSV import is
+// csvx-spec/spec/11-import-export.md §11.1; the CLI only parses flags and prints — the conversion
+// itself is csvx-go's ImportCSVFile.
+func isCSVImport(arguments []string) bool {
+	for index := 0; index < len(arguments); index++ {
+		switch argument := arguments[index]; {
+		case argument == "--name" || argument == "--delimiter":
+			index++ // skip the flag's value
+		case !strings.HasPrefix(argument, "-"):
+			return strings.ToLower(filepath.Ext(argument)) == ".csv"
+		}
+	}
+	return false
+}
+
+func runImportCSV(arguments []string) {
+	input, output, options, showHelp, err := parseImportCSVArguments(arguments)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx import: %v\n\n", err)
+		printCommandHelp(os.Stderr, "import")
+		os.Exit(2)
+	}
+	if showHelp {
+		printCommandHelp(os.Stdout, "import")
+		return
+	}
+	if ext := strings.ToLower(filepath.Ext(output)); ext != ".csvx" {
+		fmt.Fprintf(os.Stderr, "csvx import: expected a .csvx output, got %q\n", output)
+		os.Exit(2)
+	}
+	workbook, warnings, err := csvx.ImportCSVFile(input, options)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx import: %v\n", err)
+		os.Exit(1)
+	}
+	if err := csvx.WritePackage(workbook, output); err != nil {
+		fmt.Fprintf(os.Stderr, "csvx import: %v\n", err)
+		os.Exit(1)
+	}
+	for _, warning := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s: %s\n", warning.Location, warning.Reason)
+	}
+	fmt.Printf("imported: %s\n", output)
+}
+
+func parseImportCSVArguments(arguments []string) (input, output string, options csvx.CSVImportOptions, help bool, err error) {
+	var positional []string
+	for index := 0; index < len(arguments); index++ {
+		switch argument := arguments[index]; argument {
+		case "--help", "-h":
+			return "", "", options, true, nil
+		case "--no-header":
+			options.NoHeader = true
+		case "--infer":
+			options.Infer = true
+		case "--name", "--delimiter":
+			if index+1 >= len(arguments) {
+				return "", "", options, false, fmt.Errorf("%s requires a value", argument)
+			}
+			index++
+			if argument == "--name" {
+				options.Name = arguments[index]
+				break
+			}
+			delimiter := arguments[index]
+			if delimiter == "tab" || delimiter == "\\t" {
+				delimiter = "\t"
+			}
+			if utf8.RuneCountInString(delimiter) != 1 {
+				return "", "", options, false, fmt.Errorf("--delimiter must be a single character (or \"tab\"), got %q", arguments[index])
+			}
+			options.Delimiter, _ = utf8.DecodeRuneInString(delimiter)
+		default:
+			if strings.HasPrefix(argument, "-") {
+				return "", "", options, false, fmt.Errorf("unknown flag %q", argument)
+			}
+			positional = append(positional, argument)
+		}
+	}
+	if len(positional) != 2 {
+		return "", "", options, false, fmt.Errorf("provide an input .csv file and an output .csvx file")
+	}
+	return positional[0], positional[1], options, false, nil
 }
