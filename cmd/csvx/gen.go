@@ -121,6 +121,9 @@ func genTestCSVX(output string) error {
 	if err := writeValidationSheet(sheetsDir); err != nil {
 		return err
 	}
+	if err := writePrintSheet(sheetsDir); err != nil {
+		return err
+	}
 	if err := writeStylesFile(stagingDir); err != nil {
 		return err
 	}
@@ -226,6 +229,38 @@ func writeFormulasSheet(sheetsDir string) error {
 	return os.WriteFile(filepath.Join(sheetsDir, "formulas.meta.json"), []byte(meta), 0o644)
 }
 
+// writePrintSheet exercises every property of the sheet `print` object from
+// sheet-metadata.schema.json (spec/03-sheets.md, "Print settings"), plus one property the schema
+// doesn't define (headerFooter), which the spec requires engines to preserve.
+func writePrintSheet(sheetsDir string) error {
+	csv := "Region,Q1,Q2,Q3,Q4\nNorth,10,12,14,16\nSouth,9,11,13,15\n"
+	if err := os.WriteFile(filepath.Join(sheetsDir, "print.csv"), []byte(csv), 0o644); err != nil {
+		return err
+	}
+	meta := `{
+	"id": "print",
+	"name": "Print",
+	"print": {
+		"orientation": "landscape",
+		"paperSize": "a4",
+		"margins": {"top": 0.5, "right": 0.4, "bottom": 0.6, "left": 0.3},
+		"scale": 90,
+		"fitToWidth": 1,
+		"fitToHeight": 0,
+		"area": "A1:E3",
+		"repeatRows": "1:1",
+		"repeatColumns": "A:A",
+		"pageOrder": "overThenDown",
+		"gridlines": true,
+		"centerHorizontally": true,
+		"columnBreaks": [3],
+		"rowBreaks": [2],
+		"headerFooter": {"oddFooter": "&P of &N"}
+	}
+}`
+	return os.WriteFile(filepath.Join(sheetsDir, "print.meta.json"), []byte(meta), 0o644)
+}
+
 // writeValidationSheet exercises every validation.type from sheet-metadata.schema.json, one per
 // row, each with a representative operator/formula pairing.
 func writeValidationSheet(sheetsDir string) error {
@@ -302,7 +337,9 @@ func writeGenManifestAndWorkbook(stagingDir string) error {
 		"sheets/formulas.csv",
 		"sheets/formulas.meta.json",
 		"sheets/validation.csv",
-		"sheets/validation.meta.json"
+		"sheets/validation.meta.json",
+		"sheets/print.csv",
+		"sheets/print.meta.json"
 	]
 }`
 	workbook := `{
@@ -312,7 +349,8 @@ func writeGenManifestAndWorkbook(stagingDir string) error {
 		{"id": "types", "name": "Types", "path": "sheets/types.csv", "metadata": "sheets/types.meta.json"},
 		{"id": "errors", "name": "Errors", "path": "sheets/errors.csv", "metadata": "sheets/errors.meta.json"},
 		{"id": "formulas", "name": "Formulas", "path": "sheets/formulas.csv", "metadata": "sheets/formulas.meta.json"},
-		{"id": "validation", "name": "Validation", "path": "sheets/validation.csv", "metadata": "sheets/validation.meta.json"}
+		{"id": "validation", "name": "Validation", "path": "sheets/validation.csv", "metadata": "sheets/validation.meta.json"},
+		{"id": "print", "name": "Print", "path": "sheets/print.csv", "metadata": "sheets/print.meta.json"}
 	],
 	"calculation": {
 		"mode": "automatic",

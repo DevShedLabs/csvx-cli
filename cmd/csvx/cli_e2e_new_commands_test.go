@@ -115,10 +115,22 @@ func TestCLIEndToEnd_GenTestCSVXProducesSchemaValidFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open generated fixture: %v", err)
 	}
-	wantSheets := map[string]bool{"types": false, "errors": false, "formulas": false, "validation": false}
+	wantSheets := map[string]bool{"types": false, "errors": false, "formulas": false, "validation": false, "print": false}
 	for _, sheet := range workbook.Sheets {
 		if _, ok := wantSheets[sheet.ID]; ok {
 			wantSheets[sheet.ID] = true
+		}
+	}
+	for _, sheet := range workbook.Sheets {
+		if sheet.ID != "print" {
+			continue
+		}
+		if sheet.Print == nil || sheet.Print.Orientation == nil || string(*sheet.Print.Orientation) != "landscape" ||
+			sheet.Print.FitToWidth == nil || *sheet.Print.FitToWidth != 1 || len(sheet.Print.ColumnBreaks) != 1 {
+			t.Errorf("generated print sheet lost its print settings: %+v", sheet.Print)
+		}
+		if extra, _ := sheet.Print.AdditionalProperties.(map[string]any); extra["headerFooter"] == nil {
+			t.Errorf("generated print sheet lost its unknown headerFooter property")
 		}
 	}
 	for id, found := range wantSheets {

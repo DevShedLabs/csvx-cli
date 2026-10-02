@@ -150,12 +150,23 @@ func TestXLSXToCSVXInteropVector(t *testing.T) {
 					t.Errorf("%s: type = %q, want %q", label, metadata.Type, want)
 				}
 			case "value":
+				// Row 1 is the CSV header (spec/03-sheets.md): its value is the column's name. Data
+				// row N is Records[N-2].
 				column, row := parseA1(t, cellRef)
-				if row < 0 || row >= len(sheet.Records) || column < 0 || column >= len(sheet.Records[row]) {
+				var got string
+				switch {
+				case column < 0 || column >= len(sheet.Columns) || row < 0:
 					t.Errorf("%s: cell out of range for raw CSV value", label)
 					continue
+				case row == 0:
+					got = sheet.Columns[column].Name
+				case row-1 >= len(sheet.Records) || column >= len(sheet.Records[row-1]):
+					t.Errorf("%s: cell out of range for raw CSV value", label)
+					continue
+				default:
+					got = sheet.Records[row-1][column]
 				}
-				if got := sheet.Records[row][column]; got != want {
+				if got != want {
 					t.Errorf("%s: raw value = %q, want %q", label, got, want)
 				}
 			case "formula":
