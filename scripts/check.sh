@@ -53,4 +53,11 @@ go build ./...
 echo "check: go test ./... (includes real end-to-end + schema-validation checks)"
 go test ./...
 
+echo "check: spec coverage (csvx-spec/tools/coverage.mjs)..."
+if [ -f ../csvx-spec/tools/coverage.mjs ] && command -v node >/dev/null 2>&1; then
+	node ../csvx-spec/tools/coverage.mjs
+else
+	echo "check: csvx-spec checkout or node not found - skipping the coverage check" >&2
+fi
+
 echo "check: all checks passed"

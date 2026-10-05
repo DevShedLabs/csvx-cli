@@ -126,8 +126,8 @@ func TestCLIEndToEnd_ExportOfEditedPackageReflectsTheEdit(t *testing.T) {
 		t.Fatal("no sheet CSV in the extracted package")
 	}
 	// Rename the first column the way an editing engine does: the header cell's text and the
-	// sidecar's column name are the same fact, so both change. (If a hand edit changes only one, the
-	// sidecar's name wins today; csvx-spec/CSVX-GAPS.md item 17 tracks that being unspecified.)
+	// sidecar's column name are the same fact, so both change (csvx-spec 03-sheets.md: a package
+	// where they disagree is rejected with COLUMN_NAME_MISMATCH).
 	body := mustRead(t, sheetCSVs[0])
 	firstField := strings.SplitN(strings.SplitN(string(body), "\n", 2)[0], ",", 2)[0]
 	if err := os.WriteFile(sheetCSVs[0], []byte(strings.Replace(string(body), firstField, "EditedHeaderSentinel", 1)), 0o644); err != nil {
