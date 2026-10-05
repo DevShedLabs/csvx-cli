@@ -409,7 +409,7 @@ func printCommandHelp(output *os.File, command string) {
 		fmt.Fprintln(output, "Imports an XLSX file as a new CSVX package, preserving the original as embedded source.")
 		fmt.Fprintln(output, "Imports a plain CSV file as a single-sheet package (csvx-spec 11-import-export.md 11.1):")
 		fmt.Fprintln(output, "  --infer       declare column types from the data (default: no types declared)")
-		fmt.Fprintln(output, "  --no-header   the first row is data; a 'Column N' header row is added")
+		fmt.Fprintln(output, "  --no-header   the first row is data; an empty header row is added")
 		fmt.Fprintln(output, "  --delimiter   field delimiter, default ',' (never auto-detected)")
 		fmt.Fprintln(output, "  --name        sheet name, default the input file's name")
 		fmt.Fprintln(output, "Warnings (ragged rows, empty headers) are printed to stderr; the import still succeeds.")
