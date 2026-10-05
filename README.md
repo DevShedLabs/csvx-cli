@@ -85,6 +85,11 @@ csvx convert report.xlsx report.csvx
 # Recover an unmodified embedded XLSX source from a .csvx package
 csvx convert report.csvx report.xlsx
 
+# Extract clean CSV (csvx-spec 11.2): the sheet's data only, byte-for-byte predictable
+csvx export report.csvx report.csv                      # first sheet; formulas as calculated values
+csvx export --sheet Summary --formulas text report.csvx summary.csv
+csvx export --all report.csvx csv-out/                  # one <sheet name>.csv per sheet
+
 # Inspect a package (always prints JSON; there's no non-JSON mode for inspect)
 csvx inspect report.csvx
 
