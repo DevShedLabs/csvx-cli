@@ -66,12 +66,28 @@ func runExport(arguments []string) {
 		fmt.Fprintf(os.Stderr, "csvx export: expected an .xlsx output, got %q\n", output)
 		os.Exit(2)
 	}
-	if err := csvx.Convert(input, output); err != nil {
-		// csvx-go only recovers an unmodified embedded original today (csvx-spec/AGENTS.md rule
-		// 4.5) — general export of an arbitrary/edited workbook doesn't exist yet. Say so rather
-		// than letting the underlying error stand alone and look like a bug in this command.
-		fmt.Fprintf(os.Stderr, "csvx export: %v\n(note: only recovery of an unmodified embedded XLSX source is supported today; exporting an edited/arbitrary CSVX workbook to XLSX is not yet implemented — see csvx-spec/AGENTS.md rule 4.5)\n", err)
+	workbook, err := openInput(input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "csvx export: %v\n", err)
 		os.Exit(1)
+	}
+	// An unmodified package whose embedded XLSX is still authoritative is recovered exactly
+	// (csvx-spec 14.2). Anything else — an edited package, or one that never had a source — is
+	// written from its CSVX content (14.9), and the loss warnings the exporter reports are printed.
+	if workbook.Source != nil && workbook.Source.Authority == "original" && len(workbook.SourceBytes) > 0 {
+		if err := csvx.Convert(input, output); err != nil {
+			fmt.Fprintf(os.Stderr, "csvx export: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		warnings, err := csvx.ExportXLSX(workbook, output)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "csvx export: %v\n", err)
+			os.Exit(1)
+		}
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stderr, "csvx export: warning: %s: %s\n", warning.Feature, warning.Message)
+		}
 	}
 	fmt.Printf("exported: %s\n", output)
 }

@@ -14,7 +14,7 @@ exists and what belongs where.
 ## Install
 
 ```bash
-go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.11
+go install github.com/DevShedLabs/csvx-cli/cmd/csvx@v0.1.12
 ```
 
 This installs a `csvx` binary to `$(go env GOPATH)/bin` (make sure that's on your `PATH`). Requires
@@ -176,8 +176,10 @@ it).
 - `inspect`, `validate`, `package`, `extract`, `xlsx-inspect`, `convert`
 - `tags`, `update`, `self-update` — see "Updating" above
 - `--version`/`-v` (standard convention; `version` subcommand kept for backward compatibility)
-- Planned: `create`, `export`/`import` as first-class names (see `handoff.md`), `codegen`, and
-  `gen test.csvx` — see `AGENTS.md` for what each is responsible for.
+- `import`, `export`, `create`, `codegen`, and `gen test.csvx` — see `AGENTS.md` for what each is
+  responsible for. `export` returns the embedded original for an unmodified package and otherwise
+  writes XLSX from the CSVX content (csvx-spec 14.9), reporting anything XLSX cannot represent as
+  warnings.
 
-Formula parsing and recalculation are not implemented yet (that's `csvx-go`'s scope, not this
-repo's — see its own README/handoff).
+Formula parsing, recalculation, and editing live in the engines (`csvx-go`, `csvx-ts`), not in
+this repo.

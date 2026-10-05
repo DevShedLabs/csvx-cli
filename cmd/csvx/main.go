@@ -348,7 +348,7 @@ func printHelp(output *os.File) {
 	fmt.Fprintln(output, "Commands:")
 	fmt.Fprintln(output, "  create     Scaffold a new, minimal, schema-valid CSVX package")
 	fmt.Fprintln(output, "  import     Import an XLSX or CSV file as a new CSVX package")
-	fmt.Fprintln(output, "  export     Export a CSVX package's embedded original to XLSX")
+	fmt.Fprintln(output, "  export     Export a CSVX package to XLSX")
 	fmt.Fprintln(output, "  inspect    Print the loaded workbook as JSON")
 	fmt.Fprintln(output, "  validate   Load and validate a CSVX package")
 	fmt.Fprintln(output, "  package    Package an unpacked directory into a .csvx ZIP file")
@@ -416,9 +416,11 @@ func printCommandHelp(output *os.File, command string) {
 	case "export":
 		fmt.Fprintln(output, "Usage: csvx export <input.csvx> <output.xlsx>")
 		fmt.Fprintln(output, "")
-		fmt.Fprintln(output, "Recovers the unmodified XLSX source embedded in a CSVX package produced by 'csvx import'.")
-		fmt.Fprintln(output, "Exporting an edited/arbitrary CSVX workbook to XLSX is not implemented yet (open gap, see")
-		fmt.Fprintln(output, "csvx-spec/AGENTS.md rule 4.5).")
+		fmt.Fprintln(output, "Writes a CSVX package as an XLSX workbook (csvx-spec 14.2, 14.9):")
+		fmt.Fprintln(output, "  - an unmodified package produced by 'csvx import' returns its embedded original exactly;")
+		fmt.Fprintln(output, "  - an edited package, or one with no embedded source, is written from its CSVX content.")
+		fmt.Fprintln(output, "Anything XLSX cannot represent (for example the CYCLE error, or print properties it has no")
+		fmt.Fprintln(output, "field for) is reported as a warning on stderr; the export still succeeds.")
 	case "codegen":
 		fmt.Fprintln(output, "Usage: csvx codegen --lang <go|ts> --schema-dir <path> --out <file> [--package <name>]")
 		fmt.Fprintln(output, "")

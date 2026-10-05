@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,19 +86,115 @@ func TestCLIEndToEnd_ImportRejectsWrongDirection(t *testing.T) {
 	}
 }
 
-func TestCLIEndToEnd_ExportFailsWithoutEmbeddedSource(t *testing.T) {
+// A package with no embedded XLSX source is exported from its CSVX content (csvx-spec 14.9); the
+// result must be a real XLSX that imports again and validates.
+func TestCLIEndToEnd_ExportWritesFromCSVXContentWithoutEmbeddedSource(t *testing.T) {
 	tempDir := t.TempDir()
 	created := filepath.Join(tempDir, "nosource.csvx")
 	if _, stderr, code := runCLI(t, "create", created); code != 0 {
 		t.Fatalf("setup create failed: code=%d\nstderr=%s", code, stderr)
 	}
-	_, stderr, code := runCLI(t, "export", created, filepath.Join(tempDir, "out.xlsx"))
-	if code == 0 {
-		t.Fatalf("expected export to fail for a package with no embedded XLSX source")
+	exported := filepath.Join(tempDir, "out.xlsx")
+	if stdout, stderr, code := runCLI(t, "export", created, exported); code != 0 {
+		t.Fatalf("export failed: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
-	if stderr == "" {
-		t.Fatalf("expected an explanatory error on stderr")
+	roundTrip := filepath.Join(tempDir, "back.csvx")
+	if stdout, stderr, code := runCLI(t, "import", exported, roundTrip); code != 0 {
+		t.Fatalf("the exported XLSX did not import: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
+	validateAgainstSchema(t, roundTrip)
+}
+
+// An edited package must export its edit, not the stale embedded original (csvx-spec 14.2): an
+// editor sets the source authority to "csvx" when it edits, which is what this simulates on the
+// unpacked package.
+func TestCLIEndToEnd_ExportOfEditedPackageReflectsTheEdit(t *testing.T) {
+	input := exampleXLSXPath(t)
+	tempDir := t.TempDir()
+	imported := filepath.Join(tempDir, "imported.csvx")
+	if _, stderr, code := runCLI(t, "import", input, imported); code != 0 {
+		t.Fatalf("import failed: stderr=%s", stderr)
+	}
+	unpacked := filepath.Join(tempDir, "unpacked")
+	if _, stderr, code := runCLI(t, "extract", "--output", unpacked, imported); code != 0 {
+		t.Fatalf("extract failed: stderr=%s", stderr)
+	}
+
+	// Edit a header cell and mark the embedded source as no longer authoritative.
+	sheetCSVs, _ := filepath.Glob(filepath.Join(unpacked, "sheets", "*.csv"))
+	if len(sheetCSVs) == 0 {
+		t.Fatal("no sheet CSV in the extracted package")
+	}
+	// Rename the first column the way an editing engine does: the header cell's text and the
+	// sidecar's column name are the same fact, so both change. (If a hand edit changes only one, the
+	// sidecar's name wins today; csvx-spec/CSVX-GAPS.md item 17 tracks that being unspecified.)
+	body := mustRead(t, sheetCSVs[0])
+	firstField := strings.SplitN(strings.SplitN(string(body), "\n", 2)[0], ",", 2)[0]
+	if err := os.WriteFile(sheetCSVs[0], []byte(strings.Replace(string(body), firstField, "EditedHeaderSentinel", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	metaPaths, _ := filepath.Glob(filepath.Join(unpacked, "sheets", "*.meta.json"))
+	if len(metaPaths) == 0 {
+		t.Fatal("no sheet metadata in the extracted package")
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(mustRead(t, metaPaths[0]), &meta); err != nil {
+		t.Fatal(err)
+	}
+	columns, _ := meta["columns"].([]any)
+	if len(columns) == 0 {
+		t.Fatal("sheet metadata has no columns")
+	}
+	columns[0].(map[string]any)["name"] = "EditedHeaderSentinel"
+	metaBody, _ := json.MarshalIndent(meta, "", "  ")
+	if err := os.WriteFile(metaPaths[0], metaBody, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The authority lives under "source" in workbook.json; set it the way an editing engine does.
+	workbookPath := filepath.Join(unpacked, "workbook.json")
+	var document map[string]any
+	if err := json.Unmarshal(mustRead(t, workbookPath), &document); err != nil {
+		t.Fatal(err)
+	}
+	source, ok := document["source"].(map[string]any)
+	if !ok || source["authority"] != "original" {
+		t.Fatalf("expected an imported package to have source.authority original, got %v", document["source"])
+	}
+	source["authority"] = "csvx"
+	updated, _ := json.MarshalIndent(document, "", "  ")
+	if err := os.WriteFile(workbookPath, updated, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repackaged := filepath.Join(tempDir, "edited.csvx")
+	if _, stderr, code := runCLI(t, "package", "--output", repackaged, unpacked); code != 0 {
+		t.Fatalf("package failed: stderr=%s", stderr)
+	}
+	exported := filepath.Join(tempDir, "edited.xlsx")
+	if stdout, stderr, code := runCLI(t, "export", repackaged, exported); code != 0 {
+		t.Fatalf("export failed: code=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if original, _ := os.ReadFile(input); bytes.Equal(original, mustRead(t, exported)) {
+		t.Fatal("an edited package must not export the stale embedded original")
+	}
+	back := filepath.Join(tempDir, "back.csvx")
+	if _, stderr, code := runCLI(t, "import", exported, back); code != 0 {
+		t.Fatalf("re-import failed: stderr=%s", stderr)
+	}
+	if stdout, _, _ := runCLI(t, "inspect", back); !strings.Contains(stdout, "EditedHeaderSentinel") {
+		t.Fatalf("the exported XLSX does not contain the edit:\n%s", stdout)
+	}
+	validateAgainstSchema(t, back)
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
 
 func TestCLIEndToEnd_GenTestCSVXProducesSchemaValidFixture(t *testing.T) {
