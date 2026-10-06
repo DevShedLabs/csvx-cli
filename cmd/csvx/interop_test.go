@@ -191,9 +191,15 @@ func TestXLSXToCSVXInteropVector(t *testing.T) {
 				}
 			case "style.font.bold":
 				style := findStyleByID(t, workbook, metadata.Style)
-				got, _ := style.Font["bold"].(bool)
+				got := style.Font != nil && style.Font.Bold != nil && *style.Font.Bold
 				if got != want {
 					t.Errorf("%s: style.font.bold = %v, want %v", label, got, want)
+				}
+			case "style.font.size":
+				// Spec 08-styles.md: a number of points, never a string.
+				style := findStyleByID(t, workbook, metadata.Style)
+				if style.Font == nil || style.Font.Size == nil || *style.Font.Size != want {
+					t.Errorf("%s: style.font.size = %v, want %v", label, style.Font, want)
 				}
 			case "style.fill.color":
 				style := findStyleByID(t, workbook, metadata.Style)
